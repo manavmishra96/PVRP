@@ -6,7 +6,8 @@ from stable_baselines3.common.env_checker import check_env
 
 
 class Agent():
-    def __init__(self, loc=0, max_fuel=100, max_steps=100):
+    def __init__(self, loc=0, max_fuel=100, max_steps=100, id=0):
+        self.id = id
         self.loc = loc
         self.max_steps = max_steps
         self.max_fuel = max_fuel
@@ -32,7 +33,7 @@ class PVRP(gym.Env):
         
         self.max_fuel = 100
         self.max_steps = 100
-        self.agents = [Agent(max_fuel=self.max_fuel, max_steps=self.max_steps) for _ in range(num_agent)]
+        self.agents = [Agent(max_fuel=self.max_fuel, max_steps=self.max_steps, id=i) for i in range(num_agent)]
         
         if n is not None:
            self.n = n
@@ -125,15 +126,15 @@ class PVRP(gym.Env):
     def step(self, action):
         self.steps += 1
         for agent, next_loc in zip(self.agents, action):
-            next_clock = self.clocks + self.w * self.distances[agent.loc, next_loc]
-            next_clock = np.clip(next_clock, 0, self.T)
+            self.clocks += self.w * self.distances[agent.loc, next_loc]
+            self.clocks = np.clip(self.clocks, 0, self.T)
             dist_travelled = self.distances[agent.loc, next_loc]
             agent.update_fuel(dist_travelled)
             agent.dist = self.distances[next_loc]
 
-        reward = self._get_rewards(next_clock)
+        reward = self._get_rewards(self.clocks)
         for next_loc in action:
-            next_clock[next_loc] = 0
+            self.clocks[next_loc] = 0
         
             
         terminated = (self.steps == self.max_steps)

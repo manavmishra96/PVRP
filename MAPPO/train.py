@@ -6,6 +6,8 @@ import json
 from tqdm import tqdm
 import cv2
 from collections import defaultdict
+import numpy as np
+import matplotlib.pyplot as plt
 from time import time as t
 from torch.distributions import Categorical
 from torch.utils.tensorboard import SummaryWriter
@@ -18,10 +20,10 @@ from env import PVRP
 np.set_printoptions(threshold = np.inf, linewidth = 1000 ,precision=3, suppress=True)
 warnings.filterwarnings('ignore')
 
-NUM_EPISODES = 10000
+NUM_EPISODES = 2000000
 LEN_EPISODES = 100
 UPDATE_TIMESTEP = 100
-NUM_AGENTS = 3
+
 
 curState = []
 newState= []
@@ -58,11 +60,13 @@ def mask_fn(env) -> np.ndarray:
         
     return np.array(masks)
 
-
+NUM_AGENTS = 3
 N = 10
 env = PVRP(N, NUM_AGENTS)
 RL = PPO(env, NUM_AGENTS)
 
+
+track_rewards = []
 for episode in tqdm(range(NUM_EPISODES)):
     cur_num_agents = NUM_AGENTS
     curRawState = env.reset()
@@ -81,8 +85,8 @@ for episode in tqdm(range(NUM_EPISODES)):
         masks = mask_fn(env)
         masks = masks.astype(int)
         action = RL.policy_old.act(curState, memory, cur_num_agents, masks)
-        newRawState  = env.step(action)
-        [states, is_local, reward, terminated, truncated] = newRawState
+        newState  = env.step(action)
+        states, reward, terminated, truncated, info = newState
         done = terminated or truncated
         
         if step == LEN_EPISODES - 1:
@@ -92,7 +96,6 @@ for episode in tqdm(range(NUM_EPISODES)):
             memory.rewards.append(float(reward))
             memory.is_terminals.append(done)
             
-        newState = newRawState[0]
         
         #back prop 
         # check time termination condition
@@ -108,9 +111,10 @@ for episode in tqdm(range(NUM_EPISODES)):
         episodeReward += reward
 
         # set current state for next step
-        curState = newState
+        curState = newState[0]
         
         if done:
+            track_rewards.append(episodeReward)
             break
         
     # post episode
@@ -127,3 +131,21 @@ for episode in tqdm(range(NUM_EPISODES)):
             
     
 RL.saveModel(directory+"/checkpoints")
+
+
+# Calculate the moving average
+moving_avg = np.convolve(track_rewards, np.ones((200,))/200, mode='valid')
+
+# Calculate the standard deviation
+std_dev = np.std(track_rewards)
+
+# Plot the moving average
+plt.plot(moving_avg)
+
+# Fill the area between the moving average and the standard deviation
+plt.fill_between(range(len(moving_avg)), moving_avg - std_dev, moving_avg + std_dev, color='b', alpha=0.1)
+
+plt.xlabel('Episode')
+plt.ylabel('Reward')
+plt.title('Track Rewards')
+plt.savefig('track_rewards.png')
